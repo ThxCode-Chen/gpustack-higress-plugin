@@ -202,16 +202,8 @@ func onHttpRequestBody(ctx wrapper.HttpContext, config PluginConfig, body []byte
 }
 
 func isStreamingResponse(headers map[string][]string) bool {
-	// Transfer-Encoding: chunked
-	if tes, ok := headers["transfer-encoding"]; ok {
-		for _, te := range tes {
-			if strings.ToLower(te) == "chunked" {
-				return true
-			}
-		}
-	}
-
-	// Check for Content-Type
+	// Prefer Content-Type over Transfer-Encoding. Many gateways use chunked for a single
+	// JSON body without Content-Length; that is not SSE/token streaming.
 	if cts, ok := headers["content-type"]; ok {
 		for _, contentType := range cts {
 			ct := strings.ToLower(contentType)
@@ -220,8 +212,18 @@ func isStreamingResponse(headers map[string][]string) bool {
 				(strings.Contains(ct, "text/plain") && hasHeaderValue(headers, "x-stream", "true")) {
 				return true
 			}
+			// Plain JSON response (e.g. application/json; charset=utf-8), not stream+json above.
 			if strings.Contains(ct, "application/json") {
 				return false
+			}
+		}
+	}
+
+	// Transfer-Encoding: chunked
+	if tes, ok := headers["transfer-encoding"]; ok {
+		for _, te := range tes {
+			if strings.ToLower(te) == "chunked" {
+				return true
 			}
 		}
 	}
